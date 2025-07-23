@@ -61,3 +61,36 @@ void metropolis_sweep(int *lattice, int L, double beta, double *p_lookup) {
     }
 
 }
+
+
+/* calcolo della magnetizzazione  e energia per unità di volume, utile per il salvataggio dei dati */
+double compute_magnetization_volume(int *lattice, int L) {
+    int i, j, sum = 0;
+
+    for (i = 0; i < L; i++) {
+        for (j = 0; j < L; j++) {
+            sum += lattice[i * L + j];
+        }
+    }
+
+    return (double)sum / (L * L);
+}
+
+double compute_energy_per_spin(int *lattice, int L) {
+    int sum = 0, i, j, right, down;
+
+    for (i = 0; i < L; i++) { 
+        {
+        for (j = 0; j < L; j++)
+
+            /* condizioni periodiche: somma solo verso destra e in basso */
+            right = lattice[i * L + ((j + 1) % L)];
+            down  = lattice[((i + 1) % L) * L + j];
+
+            sum += lattice[i * L + j] * right;
+            sum += lattice[i * L + j] * down;
+        }
+    }
+
+    return -((double)sum) / (L * L);
+}

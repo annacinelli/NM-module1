@@ -117,8 +117,3 @@ void test_metropolis_sweep() {
 
     printf("PASSED: metropolis_sweep behaves as expected with fixed seed.\n\n");
 }
-
-
-
-// scrivere delle funzioni per leggere i valori del txt e lanciare le simulazioni sequenziali,
-// funzione per raccogliere i dati in cartelle di txt con nomi legtai ai valori
