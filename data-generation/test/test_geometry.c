@@ -1,35 +1,49 @@
-// funzioni di test per le funzioni in geometry.c
-
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h> /* assert è una macro della libreria <assert.h> in C che serve per debug e test; assert(expr) valuta expr */
 #include "geometry.h"
+#include "random.h"
 
 
-/* prendo un reticolo abbastanza piccolo e testo l'allocazione e la deallocazione della memoria */
-void test_create_and_free_lattice() {
-    int L = 5;
-    int *lattice = create_lattice(L);
-    assert(lattice != NULL);
-
-    free_lattice(&lattice);
-    assert(lattice == NULL);
-
-    printf("test_create_and_free_lattice passed.\n");
+bool check_spin_values(int *lattice, int L) {
+    for (int i = 0; i < L * L; i++) {
+        if (lattice[i] != 1 && lattice[i] != -1) {
+            return false;
+        }
+    }
+    return true;
 }
 
-/* verifica che ogni spin abbia valore +1 o -1, cioè che l'inizializzazione abbia funzionato correttamente */
-void test_initialize_lattice() {
-    int L = 5;
-    int *lattice = create_lattice(L);
-    initialize_lattice(L, lattice);
+int main(void) {
+    int L = 3, *lattice;
 
-    for (int i = 0; i < L * L; i++) {
-        assert(lattice[i] == 1 || lattice[i] == -1);
+    random_generator_init(42, 54);
+
+    /* tests delle funzizoni: crea il reticolo, lo inizializza e lo svuota */
+    printf("Creating lattice...\n");
+    lattice = create_lattice(L);
+    if (lattice == NULL) {
+        fprintf(stderr, "Test failed: lattice allocation returned NULL.\n");
+        return EXIT_FAILURE;
     }
 
-    free_lattice(lattice);
-    printf("test_initialize_lattice passed.\n");
+    printf("Initializing lattice...\n");
+    initialize_lattice(L, lattice);
+
+    printf("Checking spin values...\n");
+    if (!check_spin_values(lattice, L)) {
+        fprintf(stderr, "Test failed: lattice contains values other than +1 or -1.\n");
+        free_lattice(&lattice);
+        return EXIT_FAILURE;
+    }
+
+    printf("Freeing lattice...\n");
+    free_lattice(&lattice);
+    if (lattice != NULL) {
+        fprintf(stderr, "Test failed: lattice pointer not NULL after free.\n");
+        return EXIT_FAILURE;
+    }
+
+    printf("Test passed successfully!\n");
+    return EXIT_SUCCESS;
 }
-
-

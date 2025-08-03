@@ -1,59 +1,40 @@
-// funzioni di test per le funzioni in random.c
-
-#include <math.h>
-#include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <assert.h>
 #include "random.h"
+#include "pcg32min.h"
 
 
-/* verificare che i double generati siano nell'intervallo corretto [0,1) */
-void test_random_generator_doublenorm_1open() {
-    int i;
-    double r;
-    random_generator_init(42, 54);
+/* tests */
+int main(void) {
+    const int N = 1000000;  /* numero di test */
+    double x;
+    int r, min_int = RAND_MAX, max_int = 0;
 
-    for (i = 0; i < 100000; i++) {
-        r = random_generator_doublenorm_1open();
-        // Deve essere >= 0 e < 1
-        if (!(r >= 0.0 && r < 1.0)) {
-            printf("FAILED: random_generator_doublenorm_1open out of range: %f\n", r);
-            exit(1);
-        }
+    random_generator_init(42, 54);  /* valori fissi per test riproducibili */
+
+    printf("Testing random_generator_doublenorm_1open (in [0,1))...\n");
+    for (int i = 0; i < N; i++) {
+        x = random_generator_doublenorm_1open();
+        assert(x >= 0.0 && x < 1.0);
     }
-    printf("PASSED: random_generator_doublenorm_1open\n");
-}
 
-/* verificare che i double generati siano nell'intervallo corretto (0,1) */
-void test_random_generator_doublenorm_open() {
-    int i;
-    double r;
-    random_generator_init(42, 54);
-
-    for (i = 0; i < 100000; i++) {
-        r = random_generator_doublenorm_open();
-        // Deve essere > 0 e < 1
-        if (!(r > 0.0 && r < 1.0)) {
-            printf("FAILED: random_generator_doublenorm_open out of range: %f\n", r);
-            exit(1);
-        }
+    printf("Testing random_generator_doublenorm_open (in (0,1))...\n");
+    for (int i = 0; i < N; i++) {
+        x = random_generator_doublenorm_open();
+        assert(x > 0.0 && x < 1.0);
     }
-    printf("PASSED: random_generator_doublenorm_open\n");
-}
 
-/* verificare che gli interi siano in [0, RAND_MAX] */
-void test_random_generator_int() {
-    int i, r;
-    random_generator_init(42, 54);
-
-    for (i = 0; i < 100000; i++) {
+    printf("Testing random_generator_int (in [0, RAND_MAX])...\n");
+    for (int i = 0; i < N; i++) {
         r = random_generator_int();
-        // Deve essere >= 0 e <= RAND_MAX
-        if (!(r >= 0 && r <= RAND_MAX)) {
-            printf("FAILED: random_generator_int out of range: %d\n", r);
-            exit(1);
-        }
+        assert(r >= 0 && r <= RAND_MAX);
+        if (r < min_int) min_int = r;
+        if (r > max_int) max_int = r;
     }
-    printf("PASSED: random_generator_int\n");
-}
 
+    printf("All tests passed.\n");
+    printf("Min int observed: %d, Max int observed: %d\n", min_int, max_int);
+
+    return 0;
+}

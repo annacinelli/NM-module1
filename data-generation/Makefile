@@ -1,63 +1,77 @@
-# Compilatore e flags
-CC = gcc
-CFLAGS = -Wall -O2 -Iinclude
+# ========== CONFIGURAZIONE ==========
 
-# Cartelle
-SRC_DIR = src
-BUILD_DIR = build
-BIN_DIR = bin
+CC = gcc # compilatore
+CFLAGS = -Wall -O2 -Iinclude # dice a gcc dove trovare gli header
+LDLIBS = -lm # serve per linkare la libreria matematica libm
 
-# File sorgente
-SRCS = $(wildcard $(SRC_DIR)/*.c)
+SRC = src/utils.c src/ising.c src/geometry.c src/random.c src/pcg32min.c # Lista dei sorgenti comuni a entrambi i programmi
 
-# File oggetto corrispondenti in build/
-OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+# ========== TARGETS ==========
 
-# Nome eseguibile
-TARGET = ising
+.PHONY: all clean run-main run-tau_exp_main make-script-executable run-cluster-selectable help
 
-# Regola di default
-all: $(TARGET)
+all: main tau_exp_main # compila entrambi
 
-# Regola per creare l'eseguibile
-$(TARGET): $(OBJS)
-	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) $(OBJS) -o $(BIN_DIR)/$(TARGET)
-	@echo "Build complete: $(BIN_DIR)/$(TARGET)"
+# compila e produce gli eseguibili
+main: main.c $(SRC)
+	$(CC) $(CFLAGS) main.c $(SRC) $(LDLIBS) -o main
 
-# Regola per compilare i .c in .o salvando in build/
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+tau_exp_main: tau_exp_main.c $(SRC)
+	$(CC) $(CFLAGS) tau_exp_main.c $(SRC) $(LDLIBS) -o tau_exp_main
 
-# Test geometry, ising e random
-test_geometry: build/test_geometry.o build/geometry.o
-	$(CC) $(CFLAGS) $^ -o bin/test_geometry
+# Esecuzioni rapide
+run-main: main
+ifndef L
+	$(error Devi specificare L: usa 'make run-main L=60')
+endif
+	./main $(L)
 
-build/test_geometry.o: test/test_geometry.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
+run-tau_exp_main: tau_exp_main
+ifndef L
+	$(error Devi specificare L: usa 'make run-tau_exp_main L=60')
+endif
+	./tau_exp_main $(L)
 
-test_ising: build/test_ising.o build/ising.o build/geometry.o build/random.o
-	$(CC) $(CFLAGS) $^ -o bin/test_ising
+# Rende eseguibile lo script di job SLURM
+make-script-executable:
+	chmod +x submit_all_Ls.sh
 
-build/test_ising.o: test/test_ising.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
+# Esegui su cluster specificando quale eseguibile (main o tau_exp_main)
+run-cluster-selectable: make-script-executable
+ifndef EXECUTABLE
+	$(error Devi specificare EXECUTABLE=main oppure EXECUTABLE=tau_exp_main)
+endif
+	EXECUTABLE=$(EXECUTABLE) sbatch submit_all_Ls.sh
 
-test_random: build/test_random.o build/random.o
-	$(CC) $(CFLAGS) $^ -o bin/test_random
 
-build/test_random.o: test/test_random.c
-	@mkdir -p build
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Pulizia, make clean, per es. prima di un commit, per non includere .o ed eseguibili
+# Pulizia: rimuove gli eseguibili, file oggetto,...
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)/$(TARGET)
+	rm -f main tau_exp_main *.o *~ log_*.txt log_*.err
 
-# Pulizia completa
-cleanall:
-	rm -rf $(BUILD_DIR) $(BIN_DIR) $(TARGET)
 
-.PHONY: all clean cleanall
+# ========== AIUTO ==========
+
+help:
+	@echo ""
+	@echo "📦 Comandi disponibili:"
+	@echo ""
+	@echo "  make                - Mostra questo messaggio"
+	@echo "  make all            - Compila main e tau_exp_main"
+	@echo "  make main           - Compila solo main.c"
+	@echo "  make tau_exp_main   - Compila solo tau_exp_main.c"
+	@echo "  make run-main       - Mostra come lanciare ./main <L>"
+	@echo "  make run-tau_exp_main    - Mostra come lanciare ./tau_exp_main <L>"
+	@echo "  make run-cluster-selectable EXECUTABLE=main|tau_exp_main  - Esegue il cluster array per il programma scelto"
+	@echo "  make clean          - Rimuove eseguibili, file oggetto e log"
+	@echo ""
+
+.DEFAULT_GOAL := help
+
+
+
+# make main compila main.c
+# make run-main compila ed esegue main.c
+# make clean
+# make help o make
+# make all (compila tutto)
+# make make run-cluster-selectable esegue le simulazioni per i vari L su processori diversi per il programma main.c o tau_exp_main.c

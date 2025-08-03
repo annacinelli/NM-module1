@@ -1,87 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <math.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <stdbool.h>
+#include <math.h>
 #include "utils.h"
 
-#define MAX_LINE_LEN 200 /* numero massimo di caratteri che si possono leggere da una riga del file */
-#define MAX_VALUES 300
-
-/* restituisce un array di Param, cioè di strutture che contengono le coppie di valori letti */
-Param *read_param_combinations(const char *filename, int *num_params) {
-
-    FILE *fp = fopen(filename, "r"); /* apre il file txt, se non lo trova dà errore */
-    if (fp == NULL) {
-        fprintf(stderr, "Error: cannot open file %s\n", filename);
-        exit(EXIT_FAILURE);
-    }
-
-    char line[MAX_LINE_LEN];
-    int L_values[MAX_VALUES];
-    double beta_values[MAX_VALUES];
-    int L_count = 0, beta_count = 0; /* conteggi per i valori di L, beta */
-
-    fgets(line, MAX_LINE_LEN, fp); // salta intestazione
-
-    while (fgets(line, MAX_LINE_LEN, fp)) {
-        int L;
-        double beta;
-        char *L_str = NULL;
-        char *beta_str = NULL;
-
-        // Separazione della riga su base del tab
-        L_str = strtok(line, "\t\n");
-        beta_str = strtok(NULL, "\t\n");
-
-        // Prova a convertire L se esiste
-        if (L_str != NULL && strlen(L_str) > 0) {
-            if (sscanf(L_str, "%d", &L) == 1) {
-                L_values[L_count++] = L;
-            }
-        }
-
-        // Prova a convertire beta se esiste
-        if (beta_str != NULL && strlen(beta_str) > 0) {
-            if (sscanf(beta_str, "%lf", &beta) == 1) {
-                beta_values[beta_count++] = beta;
-            }
-        }
-    }
-
-    fclose(fp);
-
-    if (L_count == 0 || beta_count == 0) {
-        fprintf(stderr, "Error: at least one L and one beta value required\n");
-        exit(EXIT_FAILURE);
-    }
-
-    *num_params = L_count * beta_count;
-    Param *params = malloc((*num_params) * sizeof(Param));
-    if (params == NULL) {
-        fprintf(stderr, "Error: memory allocation failed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    int idx = 0;
-    for (int i = 0; i < L_count; i++) {
-        for (int j = 0; j < beta_count; j++) {
-            params[idx].L = L_values[i];
-            params[idx].beta = beta_values[j];
-            idx++;
-        }
-    }
-
-    return params;
-}
+#define BETA_C 0.4406867935
+#define NU     1.0
+#define WIDTH_FACTOR 1.0     // fattore moltiplicativo per la finestra: serve a controllare quanto largo è il range di beta simulato per ogni L
+#define NUM_BETA 40          // numero di beta per ogni L
 
 
-
-/* controlla se esite già la cartella 'results', altrimenti la crea;
-char *path: una stringa è semplicemente un array di caratteri terminato da '\0' */
+/* controlla se esite già la cartella 'results' per esempio, altrimenti la crea */
 void create_directory_if_needed(const char *path) {
     struct stat st = {0}; /* crea una struttura stat (<sys/stat.h>), serve per controllare informazioni sulla cartella */
 
@@ -94,13 +24,14 @@ void create_directory_if_needed(const char *path) {
     }
 }
 
-/* serve a generare un nome di file unico in una certa cartella, genera la nuova versione */
+
+/* genera un nome di file che non esiste ancora, nella cartella folder, con prefisso base_name, seguito da una versione numerata */
 void generate_unique_filename(char *folder, char *base_name, char *out_path, int max_len) {
     int version = 1;
 
     snprintf(out_path, max_len, "%s/%s_v%d.txt", folder, base_name, version); /* genera il primo nome candidato;
     'string formatted print with limit': scrive una stringa formattata (come printf), ma la scrive in un buffer,
-    cioè in una variabile char[], non sullo schermo, senza superare una certa lunghezza massima */
+    cioè in una variabile char[], senza superare una certa lunghezza massima */
     FILE *fp = fopen(out_path, "r");
 
     while (fp != NULL) {
@@ -110,3 +41,59 @@ void generate_unique_filename(char *folder, char *base_name, char *out_path, int
         fp = fopen(out_path, "r");
     }
 }
+
+
+/* genera un array di beta centrati su BETA_C e distribuiti in modo uniforme in: [BETA_C - c * L^{-1/nu}, BETA_C + c * L^{-1/nu}];
+ritorna il puntatore all'array; c = 1.0 viene dai collapse plots noti per Ising 2D  */
+double* generate_beta_range(int L, int *num_beta) {
+    double delta = WIDTH_FACTOR * pow(L, -1.0 / NU);
+    double beta_min = BETA_C - delta;
+    double beta_max = BETA_C + delta;
+
+    *num_beta = NUM_BETA;
+    double *betas = malloc(NUM_BETA * sizeof(double));
+    if (!betas) {
+        fprintf(stderr, "Errore: allocazione array beta fallita\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < NUM_BETA; i++) {
+        betas[i] = beta_min + i * (beta_max - beta_min) / (NUM_BETA - 1);
+    }
+
+    return betas;
+}
+/* poi deallocare */
+
+
+/* dato L, filename è data-analysis/tau_exp_results.txt, restitisce il tau_exp stimato */
+unsigned long long read_tau_exp_from_file(int L, const char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (!fp) {
+        fprintf(stderr, "Errore: impossibile aprire %s\n", filename);
+        exit(EXIT_FAILURE);
+    }
+
+    char line[160];
+    int file_L; /* per leggere temporaneamente il valore di L dalla riga */
+    unsigned long long tau;
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (line[0] == '#') continue; /* salta le righe che iniziano con # (commenti o intestazioni) */
+        /* se trova due valori prosegue */
+        if (sscanf(line, "%d\t%llu", &file_L, &tau) == 2) {
+            if (file_L == L) {
+                fclose(fp);
+                return tau;
+            }
+        }
+    }
+
+    fclose(fp);
+    fprintf(stderr, "Errore: valore di L = %d non trovato in %s\n", L, filename);
+    exit(EXIT_FAILURE);
+}
+
+
+
+/* caso colonne, makefile, tipi, riguardare utils.py e macro, valori T */

@@ -6,15 +6,18 @@
 #include <math.h>
 #include "ising.h"
 #include "random.h"
+#include "geometry.h"
+
 
 /* una lookup table è un array che contiene valori precalcolati, si calcolano una volta all'inizio della simulazione */
 void initialize_metropolis_lookup(double beta, double *p_lookup) {
-    int k;
 
-    for (k=1; k <= 4; k++) {
-        p_lookup[k] = exp(-2* beta * k);
+    /* k qui è E' - E */
+    for (int k=2; k <= 8; k = k+2) {
+        p_lookup[k] = exp(- beta * k);
     }
 }
+
 
 /* calcolo efficiente della differenza di energia delle due configurazioni: E' - E */
 int energy_difference(int *lattice, int s_r,  int L, int i, int j){
@@ -32,10 +35,11 @@ int energy_difference(int *lattice, int s_r,  int L, int i, int j){
 
 }
 
+
 /* update Metropolis di tutto il reticolo, uno step di simulazione */
 void metropolis_sweep(int *lattice, int L, double beta, double *p_lookup) {
     double epsilon, w;
-    int i, j, s_r, trial, k;
+    int i, j, trial, k;
 
     /* scorro (sweep) il reticolo in modo deterministico */
     for (i = 0; i < L; i++) {
@@ -44,26 +48,50 @@ void metropolis_sweep(int *lattice, int L, double beta, double *p_lookup) {
         /* calcolo un valore di epsilon in (0,1) */
         epsilon = random_generator_doublenorm_open();
 
-        if (epsilon >= 0.5)
-           continue; /* sempre accettata la configurazione iniziale */
-        else
+        if (epsilon >= 0.5) /* se si mette a 1 accetta sempre il flip come trial, a 0 non lo accetta mai come trial;
+        lasciamo 0.5 e poi magari confrontiamo */
+           continue; /* configurazione iniziale */
+        else {
            trial = (lattice[i*L + j] == -1) ? 1 : -1; /* flip dello spin in posizione i,j */
 
-        k = energy_difference(lattice, trial, L, i, j);
-        if (k <= 0)
-           lattice[i * L + j] = trial; /* accettata, modifico il reticolo e vado al prossimo punto del lattice */
-        else
-           w = random_generator_doublenorm_1open(); /* in [0,1) */
-           if (p_lookup[k] >= w) 
-               lattice[i * L + j] = trial; /* accetto e modifico il reticolo */
-
+            k = energy_difference(lattice, trial, L, i, j);
+            if (k <= 0)
+                lattice[i * L + j] = trial; /* accettata, modifico il reticolo e vado al prossimo punto del lattice */
+            else {
+                w = random_generator_doublenorm_1open(); /* in [0,1) */
+                if (p_lookup[k] >= w) 
+                    lattice[i * L + j] = trial; /* accetto e modifico il reticolo */ 
+                }
+            }
         }
     }
-
 }
 
 
-/* calcolo della magnetizzazione  e energia per unità di volume, utile per il salvataggio dei dati */
+/* update Metropolis di un punto (i, j) del reticolo, uno step di simulazione per la stima di tau_exp */
+void metropolis_sweep_single_update(int *lattice, int L, double beta, double *p_lookup, int i, int j) {
+    double epsilon, w;
+    int trial, k;
+
+    /* calcolo un valore di epsilon in (0,1) */
+    epsilon = random_generator_doublenorm_open();
+
+    if (epsilon < 0.5) {
+        trial = (lattice[i*L + j] == -1) ? 1 : -1; /* flip dello spin in posizione i,j */
+
+        k = energy_difference(lattice, trial, L, i, j);
+        if (k <= 0)
+            lattice[i * L + j] = trial; /* accettata, modifico il reticolo e vado al prossimo punto del lattice */
+        else {
+            w = random_generator_doublenorm_1open(); /* in [0,1) */
+            if (p_lookup[k] >= w) 
+                lattice[i * L + j] = trial; /* accetto e modifico il reticolo */ 
+        }
+    }
+}
+
+
+/* calcolo della magnetizzazione e energia per unità di volume, utile per il salvataggio dei dati */
 double compute_magnetization_volume(int *lattice, int L) {
     int i, j, sum = 0;
 
@@ -80,10 +108,9 @@ double compute_energy_per_spin(int *lattice, int L) {
     int sum = 0, i, j, right, down;
 
     for (i = 0; i < L; i++) { 
-        {
-        for (j = 0; j < L; j++)
+        for (j = 0; j < L; j++){
 
-            /* condizioni periodiche: somma solo verso destra e in basso */
+            /* condizioni periodiche: somma solo verso destra e in basso, si evitano i doppi conteggi */
             right = lattice[i * L + ((j + 1) % L)];
             down  = lattice[((i + 1) % L) * L + j];
 

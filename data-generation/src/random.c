@@ -1,8 +1,8 @@
-// funzioni per utilizzare il generatore di numeri dìrandom per generare double in [0,1) e interi tra 0 e RAND_MAX
+// funzioni per utilizzare il generatore di numeri random
 
-#include <math.h>
-#include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
 #include "random.h"
 #include "pcg32min.h"
 
@@ -30,3 +30,4 @@ int random_generator_int(void) {
 
     return pcg32_random_r(&pcg32_random_state) % (RAND_MAX + 1u);
 }
+

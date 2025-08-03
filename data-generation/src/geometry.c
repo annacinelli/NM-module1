@@ -17,7 +17,7 @@ int *create_lattice(int L) {
     lattice = malloc(L * L * sizeof(int));
 
     if (lattice == NULL) {
-        fprintf(stderr, "Error: unable to allocate memory for lattice of size %d x %d.\n", L, L);
+        fprintf(stderr, "Errore: impossibile allocare memoria per un reticolo di dimensioni %d x %d.\n", L, L);
         exit(EXIT_FAILURE);
     }
 
@@ -42,18 +42,4 @@ void initialize_lattice(int L, int *lattice) {
 void free_lattice(int **lattice) {
     free(*lattice);
     *lattice = NULL;
-}
-
-/* utile per il test_ising.c, ma può essere smepre utile stampare a schermo il lattice;
-   per questa non è necessario sviluppare una funzione di test, è una funzione di supporto ai test */
-void print_lattice(int *lattice, int L) {
-    int i, j;
-
-    for (i = 0; i < L; i++) {
-        for (j = 0; j < L; j++) {
-            printf("%2d ", lattice[i * L + j]);
-        }
-        printf("\n");
-    }
-    printf("\n");
 }

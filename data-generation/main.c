@@ -1,78 +1,94 @@
-/* main: si costruisce il reticolo per ogni coppia L, beta letta in params.txt; si lanciano le simulazioni e si storano
-i risultati togliendo i primi tau_exp steps e poi salvando m ogni L^2 steps */
+/* main: esegue la simulazione per un solo valore di L passato da riga di comando;
+   per ciascun L si genera l’intervallo di beta e si salvano i risultati */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #include "geometry.h"
 #include "ising.h"
 #include "random.h"
 #include "utils.h"
 
-int main(void){
+#define MAX_LEN 200
+#define BETA_C 0.4406867935
 
-    int num_params, i, j, max_len = 200; /* num_params per avere il numero di combinazioni possibili */
-    int tau_exp = 10000, T = 1000000; /* valutare....*/
-    double m, e; /* per salvare la magnetizzazione per unità di volume */
 
-    /* per prima cosa, bisogna estrarre le coppie possibili di (L, beta) con cui fare le simulazioni */
-    Param *params = read_param_combinations("params.txt", &num_params);
+/* argc: numero di argomenti (incluso il nome del programma)
+   argv: array di stringhe con gli argomenti ->
+   argv[0] è il nome del programma (es. "./main");
+   argv[1] è il primo argomento passato dall’utente (in questo caso L)*/
 
-    double p_lookup[5]; /* dichiarazione lookup table */
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Uso: %s <L>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-    /* inizializza il generatore con un seed variabile */
-    unsigned long initstate = (unsigned long) time(NULL);  /* seme principale del generatore, controlla la sequenza */
-    unsigned long initseq   = 54;  /* può essere qualsiasi numero, diverso da 0 */
+    int L = atoi(argv[1]); /* converte la stringa argv[1] in un intero (L) usando atoi() (ASCII to Integer) */
+    if (L <= 0) {
+        fprintf(stderr, "Errore: L deve essere un intero positivo.\n");
+        return EXIT_FAILURE;
+    }
+
+    double m, e, p_lookup[4];
+    int interval = L * L, num_beta, b, step;
+    const unsigned long long T = 50000000ULL; // 5 × 10^7 sweep dell'intero reticolo
+
+    char tau_exp_path[] = "data-analysis/tau_exp_results.txt";
+    const unsigned long long TAU_MAX = read_tau_exp_from_file(L, tau_exp_path); // tau_exp per termalizzazione
+    double *betas = generate_beta_range(L, &num_beta), beta;
+
+    // inizializza RNG
+    unsigned long initstate = (unsigned long) time(NULL);
+    unsigned long initseq = 54;
     random_generator_init(initstate, initseq);
 
-    /* loop delle simulazioni sulle coppie nelle strutture */
-    for (i = 0; i < num_params; i++) {
+    for (b = 0; b < num_beta; b++) {
+        beta = betas[b];
 
-        char base_name[100], out_path[100];
-        sprintf(base_name, "L%d_beta%.6f", params[i].L, params[i].beta);
-        char sotto_cartella_results[100];
-        sprintf(sotto_cartella_results, "results/%s", base_name);
+        // prepara cartelle e nomi file
+        char base_name[MAX_LEN], out_path[MAX_LEN], sotto_cartella_results[256];
+        snprintf(base_name, sizeof(base_name), "L%d_beta%.6f", L, beta);
+        snprintf(sotto_cartella_results, sizeof(sotto_cartella_results), "results/%s", base_name);
 
-        create_directory_if_needed("results"); /* crea la cartella di base results */
-        create_directory_if_needed(&sotto_cartella_results); /* crea la sottocartella corrispondente a (L, beta) estratti */
-        generate_unique_filename("results", &base_name, &out_path, max_len);
+        create_directory_if_needed("results");
+        create_directory_if_needed(sotto_cartella_results);
+        generate_unique_filename(sotto_cartella_results, base_name, out_path, MAX_LEN);
 
-        initialize_metropolis_lookup(params[i].beta, p_lookup);
+        // inizializza lookup Metropolis
+        initialize_metropolis_lookup(beta, p_lookup);
 
-        /* allocazione e inizializzazione del reticolo */
-        int *lattice;
-        lattice = create_lattice(params[i].L);
-        initialize_lattice(params[i].L, lattice);
+        // inizializza reticolo
+        int *lattice = create_lattice(L);
+        initialize_lattice(L, lattice);
 
-        /* apro il file out_path in scrittura */
         FILE *fp = fopen(out_path, "w");
         if (!fp) {
-            perror("Errore apertura file di output");
+            perror("Errore apertura file");
             exit(EXIT_FAILURE);
         }
 
-        /* loop Metropolis, salto i primi tau_exp speps e poi salvo i valori di m solo ogni L^2 steps */
-        for(j = 0; j < tau_exp; j++) {
-            metropolis_sweep(lattice, params[i].L, params[i].beta, p_lookup);
-        }
+        // scrive intestazione
+        fprintf(fp, "# step\tm\tenergy\n");
 
-        for(j = tau_exp; j < T; j++) {
-            metropolis_sweep(lattice, params[i].L, params[i].beta, p_lookup);
-            if((j-tau_exp) % (params[i].L * params[i].L) == 0){
-                /* si calcola m ed e si salvano sul txt corrispondente */
-                m = compute_magnetization_volume(lattice, params[i].L);
-                e = compute_energy_per_spin(lattice, params[i].L);
-                fprintf(fp, "%d\t%.6f\t%.6f\n", j, m, e);  /* salva lo step, m ed e */
+        for (step = 0; step < T; step++) {
+            metropolis_sweep(lattice, L, beta, p_lookup);
+
+            if (step >= TAU_MAX) { /* salva ogni L^2 steps */
+                m = compute_magnetization_volume(lattice, L);
+                e = compute_energy_per_spin(lattice, L);
+                fprintf(fp, "%d\t%.6f\t%.6f\n", step, m, e);
             }
         }
 
         fclose(fp);
         free_lattice(&lattice);
-        }
+    }
 
-
-    free(params);
+    free(betas);
     return 0;
 }
+
