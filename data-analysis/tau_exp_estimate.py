@@ -2,6 +2,8 @@ import os, re
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from collections import defaultdict
+from numpy.fft import fft, ifft
 from utils import find_file_paths_interactive, update_tau_exp_file
 
 BETA_C = 0.4406867935
@@ -39,88 +41,87 @@ def autocorrelation_function(x, max_lag):
     x = x - np.mean(x)
 
     # Calcola autocorrelazione (convoluzione discreta di due array laggati)
-    acf_full = np.correlate(x, x, mode='full')  # lunghezza 2N - 1 (c'è lo 0)
-    acf = acf_full[N - 1:N - 1 + max_lag]  # prende solo lag >= 0
+    f = fft(x, n=2*N)
+    acf = np.real(ifft(f * np.conjugate(f)))[:max_lag]
     acf /= acf[0] # normalizza
 
     return acf
 
 
-def stima_tau_exp_e_plot_acf_vs_L(data_dir):
+def stima_tau_exp_media_acf(data_dir, max_lag=None):
     """
-    Sceglie i paths da analizzare per L scelti dall'utente, plotta la acf, stima tau_exp per ogni L
-    e plotta anche tau_exp in funzione di L.
+    Per ogni L, prende tutte le run (più versioni), calcola e media le ACF,
+    poi stima tau_exp da questa media.
     """
     file_paths = find_file_paths_interactive(data_dir)
+
+    # Raggruppa i path per valore di L
+    gruppi_per_L = defaultdict(list)
+    for path in file_paths:
+        match = re.search(r"L(\d+)_beta", os.path.basename(path))
+        if match:
+            L = int(match.group(1))
+            gruppi_per_L[L].append(path)
 
     L_values = []
     tau_exp_values = []
 
-    # plot per C(tau)
     plt.figure(figsize=(7, 5))
 
-    for path in file_paths:
-        data = np.loadtxt(path, skiprows=1)
-        m = data[:, 1]
+    for L in sorted(gruppi_per_L.keys()):
+        paths = gruppi_per_L[L]
+        acf_list = []
 
-        # Estrai L dal nome del file
-        match = re.search(r"L(\d+)_beta", os.path.basename(path))
-        if match:
-            L = int(match.group(1))
-        else:
-            raise ValueError(f"Impossibile estrarre L da {path}")
+        for path in paths:
+            data = np.loadtxt(path, skiprows=1)
+            m = data[:, 1]
 
-        max_lag = len(m) - 1
-        acf = autocorrelation_function(m, max_lag=max_lag)
-        lags = np.arange(max_lag)
+            # imposta max_lag se non specificato
+            if max_lag is None:
+                max_lag_local = len(m)-1
+            else:
+                max_lag_local = min(max_lag, len(m) - 1)
 
-        # Fit per stimare tau_exp
+            acf = autocorrelation_function(m, max_lag_local)
+            acf_list.append(acf)
+
+        # calcola media delle autocorrelazioni
+        acf_array = np.array(acf_list)
+        acf_mean = np.mean(acf_array, axis=0)
+        lags = np.arange(len(acf_mean))
+
+        # fit per tau_exp
         try:
-            popt, _ = curve_fit(exp_decay, lags, acf, p0=(1.0, 100.0))
+            popt, _ = curve_fit(exp_decay, lags, acf_mean, p0=(1.0, 100.0))
             _, tau_exp = popt
             tau_exp = int(round(tau_exp))
         except RuntimeError:
             print(f"Fit fallito per L = {L}, si salta.")
             continue
 
-        print(f"→ L = {L} → τ_exp = {tau_exp}\n")
+        print(f"→ L = {L} → τ_exp = {tau_exp} (media su {len(paths)} run)\n")
 
         L_values.append(L)
         tau_exp_values.append(tau_exp)
 
-        # Aggiungi curva C(tau) al plot
-        plt.plot(lags, acf, label=f"L = {L}")
+        plt.plot(lags, acf_mean, linestyle= '-.', label=f"L = {L} (mean)")
 
-    plt.xlabel(r'$\tau$', fontsize=10)
-    plt.ylabel(r'$C(\tau)$', fontsize=10)
-    plt.title('Funzione di autocorrelazione $C(\\tau)$ per vari $L$', fontsize=10)
-    plt.legend(fontsize=9)
+    plt.xlabel(r'$\tau$', fontsize=14)
+    plt.ylabel(r'$C(\tau)$', fontsize=14)
+    plt.title('Autocorrelazione media $C(\\tau)$ per ogni $L$', fontsize=14)
+    plt.legend(fontsize=11)
     plt.grid(True)
-    plt.tick_params(labelsize=10)
-    plt.tight_layout()
-    plt.show()
-
-    # Ordina risultati per L
-    L_values, tau_exp_values = zip(*sorted(zip(L_values, tau_exp_values)))
-
-    # Plot tau_exp vs L
-    plt.figure(figsize=(6, 4))
-    plt.plot(L_values, np.array(tau_exp_values)/1e3, 'o-', label=r'$\tau_{\mathrm{exp}}(L)/10^{3}$')
-    plt.xlabel(r'$L$', fontsize=10)
-    plt.ylabel(r'$\tau_{\mathrm{exp}}$', fontsize=10)
-    plt.title(r'Stima di $\tau_{\mathrm{exp}}$ in funzione di $L$', fontsize=10)
-    plt.grid(True)
-    plt.legend(fontsize=10)
-    plt.tick_params(labelsize=10)
+    plt.tick_params(labelsize=12)
     plt.tight_layout()
     plt.show()
 
     return L_values, tau_exp_values
 
 
+
 if __name__ == "__main__":
 
     data_dir = "../data-generation/results-tau-exp"
 
-    L_vals, tau_exp_vals = stima_tau_exp_e_plot_acf_vs_L(data_dir)
+    L_vals, tau_exp_vals = stima_tau_exp_media_acf(data_dir)
     update_tau_exp_file(L_vals, tau_exp_vals, "tau_exp_results.txt")

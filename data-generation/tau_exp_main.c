@@ -16,7 +16,7 @@ si sceglie L da terminale e si prende un beta vicino a beta_c */
 valore in tutto il codice prima della compilazione (non possono essere modificate accidentalmente nel codice); 
 utile per dichiarare array statici, ma non hanno tipo; una macro vale in tutto il progetto se messa in un header */
 #define MAX_LEN 200
-#define BETA  0.440686 /* leggermente sotto beta_c */
+#define BETA  0.44068679 /* leggermente sotto beta_c */
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     }
 
     double m, e, p_lookup[4];
-    const unsigned long long T = 50000000ULL * (L * L); // numero di sweep Metropolis (single update)
+    const unsigned long long T = 50000000ULL * (L*L); // numero di sweep Metropolis (single update)
 
     /* inizializza generatore di numeri casuali */
     unsigned long initstate = (unsigned long) time(NULL);

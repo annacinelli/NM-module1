@@ -1,6 +1,8 @@
 import os
 import re
 from collections import defaultdict
+import numpy as np
+
 
 def find_file_paths_interactive(data_dir):
     """
@@ -92,20 +94,24 @@ def find_file_paths_interactive(data_dir):
         available_versions = [v for v, _ in versions]
 
         while True:
+            scelta_versioni = input("Inserisci i numeri delle versioni desiderate separati da spazio (o 'o'): ").strip()
+            if scelta_versioni.lower() == "o":
+                versioni_scelte = available_versions
+                break
             try:
-                v_scelta = int(input("Inserisci il numero della versione desiderata (es. 3 per _v3.txt): "))
-                if v_scelta in available_versions:
+                versioni_scelte = list(map(int, scelta_versioni.split()))
+                if all(v in available_versions for v in versioni_scelte):
                     break
                 else:
-                    print("Versione non disponibile. Riprova.")
+                    print("Alcune versioni non disponibili. Riprova.")
             except ValueError:
-                print("Input non valido. Inserisci un numero intero.")
+                print("Input non valido. Inserisci numeri interi separati da spazio.")
 
-        fname_scelto = f"{folder_name}_v{v_scelta}.txt"
-        full_path = os.path.join(folder_path, fname_scelto)
-        print(f"File selezionato per L = {L_scelto}: {full_path}\n")
+        for v in versioni_scelte:
+            fname_scelto = f"{folder_name}_v{v}.txt"
+            full_path = os.path.join(folder_path, fname_scelto)
+            file_paths.append(full_path)
 
-        file_paths.append(full_path)
 
     return file_paths
 
@@ -139,4 +145,20 @@ def update_tau_exp_file(L_values, tau_exp_values, results_path):
         for L in sorted(risultati):
             f.write(f"{L:<4} {risultati[L]}\n")
 
+
+def generate_unique_filename(base_dir, base_name="observables"):
+    i = 1
+    while True:
+        candidate = os.path.join(base_dir, f"{base_name}_v{i}.txt")
+        if not os.path.exists(candidate):
+            return candidate
+        i += 1
+
+def read_data_file(file_path):
+
+    data = np.loadtxt(file_path)
+    m_values = data[:, 1]
+    e_values = data[:, 2]
+
+    return m_values, e_values
 

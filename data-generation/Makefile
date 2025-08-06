@@ -8,7 +8,7 @@ SRC = src/utils.c src/ising.c src/geometry.c src/random.c src/pcg32min.c # Lista
 
 # ========== TARGETS ==========
 
-.PHONY: all clean run-main run-tau_exp_main make-script-executable run-cluster-selectable help
+.PHONY: all clean run-main run-tau_exp_main help
 
 all: main tau_exp_main # compila entrambi
 
@@ -32,18 +32,6 @@ ifndef L
 endif
 	./tau_exp_main $(L)
 
-# Rende eseguibile lo script di job SLURM
-make-script-executable:
-	chmod +x submit_all_Ls.sh
-
-# Esegui su cluster specificando quale eseguibile (main o tau_exp_main)
-run-cluster-selectable: make-script-executable
-ifndef EXECUTABLE
-	$(error Devi specificare EXECUTABLE=main oppure EXECUTABLE=tau_exp_main)
-endif
-	EXECUTABLE=$(EXECUTABLE) sbatch submit_all_Ls.sh
-
-
 # Pulizia: rimuove gli eseguibili, file oggetto,...
 clean:
 	rm -f main tau_exp_main *.o *~ log_*.txt log_*.err
@@ -61,7 +49,6 @@ help:
 	@echo "  make tau_exp_main   - Compila solo tau_exp_main.c"
 	@echo "  make run-main       - Mostra come lanciare ./main <L>"
 	@echo "  make run-tau_exp_main    - Mostra come lanciare ./tau_exp_main <L>"
-	@echo "  make run-cluster-selectable EXECUTABLE=main|tau_exp_main  - Esegue il cluster array per il programma scelto"
 	@echo "  make clean          - Rimuove eseguibili, file oggetto e log"
 	@echo ""
 

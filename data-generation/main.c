@@ -34,11 +34,11 @@ int main(int argc, char *argv[]) {
     }
 
     double m, e, p_lookup[4];
-    int interval = L * L, num_beta, b, step;
+    int num_beta, b, step;
     const unsigned long long T = 50000000ULL; // 5 × 10^7 sweep dell'intero reticolo
 
-    char tau_exp_path[] = "data-analysis/tau_exp_results.txt";
-    const unsigned long long TAU_MAX = read_tau_exp_from_file(L, tau_exp_path); // tau_exp per termalizzazione
+    char tau_exp_path[] = "../data-analysis/tau_exp_results.txt";
+    const unsigned long long TAU_MAX = read_tau_exp_from_file(L, tau_exp_path)/(L*L); // tau_exp per termalizzazione
     double *betas = generate_beta_range(L, &num_beta), beta;
 
     // inizializza RNG
